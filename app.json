@@ -1,12 +1,43 @@
 {
-  "name": "alpaca-trader",
-  "stack": "container",
+  "name": "Alpaca Auto-Trader",
+  "description": "Runs your trading strategy every 3 minutes with APScheduler + Flask.",
+  "repository": "https://github.com/rafiulhc/alpaca-saas",
+  "keywords": ["python", "flask", "alpaca", "trading", "scheduler", "polygon", "mongodb"],
   "env": {
-    "POLYGON_API_KEY": {"required": true},
-    "KEY_ID": {"required": true},
-    "SECRET_KEY": {"required": true},
-    "MONGO_URI": {"required": true},
-    "MONGO_DB_NAME": {"required": true},
-    "SUSPENDED": {"required": false, "value": "false"}
-  }
+    "KEY_ID": {
+      "description": "Your Alpaca API Key ID",
+      "required": true
+    },
+    "SECRET_KEY": {
+      "description": "Your Alpaca API Secret Key",
+      "required": true
+    },
+    "POLYGON_API_KEY": {
+      "description": "Your Polygon.io API Key",
+      "required": true
+    },
+    "MONGO_URI": {
+      "description": "Your MongoDB connection string (MongoDB Atlas recommended).",
+      "required": true
+    },
+    "LICENSE_KEY": {
+      "description": "License key provided by the vendor (you).",
+      "required": true
+    },
+    "LICENSE_SERVER": {
+      "description": "License verification endpoint (e.g., https://license.yourdomain.com)",
+      "required": true
+    },
+    "BASE_URL": {
+      "description": "Alpaca API base URL",
+      "value": "https://api.alpaca.markets"
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "eco"
+    }
+  },
+  "stack": "heroku-22"
 }
