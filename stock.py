@@ -1052,6 +1052,534 @@ def get_cash_reports():
     except Exception as e:
         return {"error": str(e)}, 500
 
+
+@app.route("/dashboard", methods=["GET"])
+def dashboard_page():
+    return """
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Trading Dashboard</title>
+<style>
+  :root{--bg:#fff;--panel:#f8f9fa;--card:#fff;--ink:#222;--muted:#666;--border:#e0e0e0;--accent:#3498db;--ok:#138a36;--bad:#c0392b;}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;background:#fff;color:var(--ink);}
+  .container{max-width:1200px;margin:0 auto;padding:18px;}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin:10px 0 18px;}
+  .h1{font-weight:700;font-size:22px}
+  .pill{font:600 13px/1 system-ui;padding:6px 10px;border-radius:999px;background:#eee}
+  .pill.ok{background:#e7f8ed;color:var(--ok)}
+  .pill.bad{background:#fdecea;color:var(--bad)}
+  .panel{background:var(--panel);border-radius:12px;padding:16px 20px;box-shadow:0 2px 12px rgba(0,0,0,.06);margin-bottom:20px}
+  .grid{display:grid;gap:14px}
+  .grid-4{grid-template-columns:repeat(4,1fr)}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center}
+  .card .lbl{font-size:14px;color:#777}
+  .card .val{font-size:16px;font-weight:700;color:#222;margin-top:4px}
+  .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0}
+  input[type="text"], input[type="date"], select{padding:8px;border:1px solid #ccc;border-radius:6px;background:#f9f9f9;font-size:14px}
+  button{padding:8px 12px;border-radius:8px;border:1px solid #ccc;background:#eee;cursor:pointer}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.link{border:none;background:none;color:var(--accent);font-weight:600}
+  table{width:100%;border-collapse:collapse;margin-top:10px}
+  th,td{padding:10px;border:1px solid #ddd}
+  th{background:#000;color:#fff;cursor:pointer;text-align:left}
+  td.center{text-align:center}
+  .gain{font-weight:700;color:var(--ok)}
+  .loss{font-weight:700;color:var(--bad)}
+  .rowBlue{background:#e9f4ff}
+  .footer{display:flex;justify-content:center;align-items:center;gap:10px;margin:10px 0}
+  .muted{color:#888}
+  .hidden{display:none}
+  .settings{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+  .settings h2{margin:0 0 12px;text-align:center;font-size:18px}
+  .grid-4.settings-grid{grid-template-columns:repeat(4, minmax(0,1fr))}
+  .field label{display:block;font-weight:600;margin:0 0 6px;color:#444}
+  .field input{width:100%}
+  .radioRow{display:flex;justify-content:center;gap:24px;margin-top:14px}
+  .toast{position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:10px 14px;border-radius:8px;font-size:14px;opacity:.95}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="topbar">
+    <div class="h1">Trading Dashboard</div>
+    <div>
+      <span id="market-pill" class="pill">Market: …</span>
+      <button class="link" id="toggleSettingsBtn">⬇️ Open Settings</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="grid grid-4" id="statsGrid">
+      <!-- metric cards injected -->
+    </div>
+  </div>
+
+  <div id="settingsPanel" class="settings hidden">
+    <h2>⚙️ Strategy Settings</h2>
+    <div class="grid grid-4 settings-grid" id="settingsGrid"></div>
+    <div class="radioRow">
+      <label><input type="radio" name="buyMode" id="fixedMode" /> Use Fixed Amount ($)</label>
+      <label><input type="radio" name="buyMode" id="percentMode" /> Use % of Portfolio</label>
+    </div>
+    <div style="display:flex;justify-content:center;margin-top:14px">
+      <button id="saveBtn" class="primary">💾 Save Settings</button>
+    </div>
+  </div>
+
+  <div class="controls">
+    <label><input type="checkbox" id="dupesOnly"/> Tickers With Multiple Open Positions</label>
+    <input type="text" id="searchTicker" placeholder="Search by Ticker"/>
+    <div>
+      <button id="btnToday" class="primary">Today</button>
+      <button id="btnWeek" class="primary">This Week</button>
+      <button id="btnMonth" class="primary">This Month</button>
+    </div>
+    <label>From: <input type="date" id="startDate"/></label>
+    <label>To: <input type="date" id="endDate"/></label>
+    <button id="resetBtn">Reset</button>
+    <select id="statusFilter">
+      <option value="all">All Orders</option>
+      <option value="open">Open</option>
+      <option value="closed">Closed</option>
+    </select>
+  </div>
+
+  <table id="ordersTable">
+    <thead>
+      <tr>
+        <th data-key="timestamp">Buy Time</th>
+        <th data-key="symbol">Ticker</th>
+        <th data-key="qty">Qty</th>
+        <th data-key="price">Buy Price</th>
+        <th data-key="status">Status</th>
+        <th data-key="current_price">Current Price</th>
+        <th data-key="sell_price">Sell Price</th>
+        <th data-key="hold_days">Hold Duration</th>
+        <th data-key="gain_loss">% Gain/Loss</th>
+      </tr>
+    </thead>
+    <tbody id="ordersBody"></tbody>
+  </table>
+
+  <div class="footer">
+    <button id="prevBtn">Previous</button>
+    <span id="pageText" class="muted">Page 1 of 1</span>
+    <button id="nextBtn">Next</button>
+    <span class="muted" id="totalPositions"></span>
+    <label>Items per page:
+      <select id="itemsPerPage">
+        <option value="25">25</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+        <option value="300">300</option>
+      </select>
+    </label>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script>
+(function(){
+  const $ = (s)=>document.querySelector(s);
+  const $$ = (s)=>Array.from(document.querySelectorAll(s));
+
+  // ---- State ----
+  let orders = [];
+  let settings = {};
+  let settingsLoading = true;
+  let alpacaCash = null, portfolioValue = null, marketStatus = null;
+
+  let sortConfig = {key:null, direction:"asc"};
+  let searchTicker = "";
+  let startDate = ""; let endDate = "";
+  let statusFilter = "all";
+  let showDupesOnly = false;
+
+  let itemsPerPage = parseInt(localStorage.getItem("itemsPerPage")||"25",10);
+  let currentPage = 1;
+
+  const labelMap = {
+    amount: "Fixed Buy Amount ($)",
+    amount_in_percent: "Buy Amount (%)",
+    max_buys: "Maximum Buys For Ticker",
+    MIN_CHANGE_PERCENT: "Minimum % Drop to Qualify",
+    profit_percent: "Profit Target (%)",
+    total_buys_today: "Maximum Total Buys",
+    same_day_profit_percent: "Same Day Profit (%)",
+    mid_term_profit_percent: "2-13 days Profit (%)",
+    min_volume: "Minimum Volume",
+    price_lookback_days: "Uptrend Lookback Days",
+    MIN_MARKET_CAP: "Market Cap ($)",
+    lookback_surge_days: "Surge Days",
+    lookback_surge_percentage: "Lookback Surge Percentage (%)",
+    short_up_days: "Short Uptrend Lookback (d)",
+    short_up_gain: "Short Uptrend Gain (%)",
+    mid_up_days: "Medium Uptrend Lookback (d)",
+    mid_up_gain: "Medium Uptrend Gain (%)",
+    long_up_days: "Long Uptrend Lookback (d)",
+    long_up_gain: "Long Uptrend Gain (%)",
+    xlong_up_days: "Extra-Long Uptrend Lookback (d)",
+    xlong_up_gain: "Extra-Long Uptrend Gain (%)",
+    spike_days: "Spike Lookback (d)",
+    spike_gain: "Spike Gain (%)",
+    ath_lookback_days: "ATH Lookback Days",
+    ath_block_days: "ATH Block Days",
+  };
+
+  // ---- Helpers ----
+  const api = (path, opt)=> fetch(path, opt).then(r=>r.json());
+  const laMidnight = (d)=>{ const s = new Date(d).toLocaleString("en-US",{timeZone:"America/Los_Angeles"}); const x=new Date(s); x.setHours(0,0,0,0); return x; };
+  const sameDay = (a,b)=>a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+  const normDate = (ds)=>{ if(!ds) return null; const ld=new Date(ds); const s=ld.toLocaleString("en-US",{timeZone:"America/Los_Angeles"}); const x=new Date(s); x.setHours(0,0,0,0); x.setDate(x.getDate()+1); return x; };
+  const toast=(msg,ok=true)=>{ const el=$("#toast"); el.textContent=msg; el.classList.remove("hidden"); el.style.background=ok?"#111":"#a00"; setTimeout(()=>el.classList.add("hidden"),2200); };
+
+  // ---- Fetchers ----
+  async function loadCash(){
+    try{
+      const r = await api("/api/cash");
+      if(r.status==="success"){ alpacaCash=r.cash; portfolioValue=r.portfolio_value; }
+    }catch(e){}
+  }
+  async function loadSettings(){
+    try{
+      const r = await api("/api/settings");
+      if(r.code==="success"){ settings=r.settings; settingsLoading=false; renderSettings(); }
+    }catch(e){ settingsLoading=false; }
+  }
+  async function loadMarket(){
+    try{
+      const r = await api("/market-status");
+      marketStatus = r.market || "error";
+    }catch(e){ marketStatus="error"; }
+  }
+  async function loadOrders(){
+    try{
+      const r = await api("/api/orders");
+      orders = (r.orders||[]).slice().reverse();
+    }catch(e){ orders=[]; }
+  }
+
+  // ---- Metrics ----
+  function avgHoldDays(){
+    if(!orders.length) return 0;
+    const total = orders.reduce((sum,o)=>{
+      const b=new Date(o.timestamp); const e=o.sell_time?new Date(o.sell_time):new Date();
+      return sum + Math.floor((e-b)/(1000*60*60*24));
+    },0);
+    return Math.round(total/orders.length);
+  }
+  function medianHoldDays(){
+    const sold = orders.filter(o=>o.sell_time);
+    if(!sold.length) return 0;
+    const arr = sold.map(o=>{
+      const b=new Date(o.timestamp); const s=new Date(o.sell_time);
+      return Math.floor((s-b)/(1000*60*60*24));
+    }).sort((a,b)=>a-b);
+    const mid = Math.floor(arr.length/2);
+    return arr.length%2?arr[mid]:Math.round((arr[mid-1]+arr[mid])/2);
+  }
+  function totalOpenSpend(){
+    const v = orders.filter(o=>!o.sell_time).reduce((t,o)=>{
+      const p=parseFloat(o.price||0); const q=parseFloat(o.qty||0); return t + p*q;
+    },0);
+    return v.toFixed(2);
+  }
+  function soldAmountWithGain10(){
+    const v = orders.filter(o=>o.sell_time).reduce((t,o)=>{
+      const p=parseFloat(o.price||0); const q=parseFloat(o.qty||0);
+      return t + (p*q*1.10);
+    },0);
+    return v.toFixed(2);
+  }
+
+  // ---- Settings UI ----
+  function renderSettings(){
+    const grid = $("#settingsGrid");
+    grid.innerHTML = "";
+    const keys = [
+      "amount","amount_in_percent","max_buys","MIN_CHANGE_PERCENT","profit_percent","total_buys_today",
+      "same_day_profit_percent","mid_term_profit_percent","min_volume","price_lookback_days","MIN_MARKET_CAP",
+      "lookback_surge_days","lookback_surge_percentage","short_up_days","short_up_gain","mid_up_days","mid_up_gain",
+      "long_up_days","long_up_gain","xlong_up_days","xlong_up_gain","spike_days","spike_gain","ath_lookback_days","ath_block_days"
+    ];
+    keys.forEach(k=>{
+      const val = (settings && (settings[k]!==undefined && settings[k]!==null)) ? settings[k] : "";
+      const div = document.createElement("div");
+      div.className="field";
+      div.innerHTML = '<label>'+ (labelMap[k]||k.replace(/_/g," ")) +'</label>'
+        + '<input type="number" step="any" data-key="'+k+'" value="'+val+'"/>';
+      grid.appendChild(div);
+    });
+    $("#fixedMode").checked = !settings.use_percent;
+    $("#percentMode").checked = !!settings.use_percent;
+  }
+
+  async function saveSettings(){
+    const payload = {};
+    $$("#settingsGrid input[data-key]").forEach(inp=>{
+      const k = inp.getAttribute("data-key");
+      const n = Number(inp.value);
+      payload[k] = Number.isFinite(n) ? n : 0;
+    });
+    payload.use_percent = $("#percentMode").checked;
+    if (payload.MIN_CHANGE_PERCENT>0) payload.MIN_CHANGE_PERCENT = -Math.abs(payload.MIN_CHANGE_PERCENT);
+    // sensible defaults
+    payload.min_volume = payload.min_volume || 2000000;
+    payload.price_lookback_days = payload.price_lookback_days || 365;
+    payload.MIN_MARKET_CAP = payload.MIN_MARKET_CAP || 1000000000;
+    payload.lookback_surge_days = payload.lookback_surge_days || 30;
+    payload.lookback_surge_percentage = payload.lookback_surge_percentage || 100;
+    payload.short_up_days = payload.short_up_days || 5;
+    payload.short_up_gain = payload.short_up_gain || 1;
+    payload.mid_up_days = payload.mid_up_days || 10;
+    payload.mid_up_gain = payload.mid_up_gain || 1;
+    payload.long_up_days = payload.long_up_days || 30;
+    payload.long_up_gain = payload.long_up_gain || 1;
+    payload.xlong_up_days = payload.xlong_up_days || 90;
+    payload.xlong_up_gain = payload.xlong_up_gain || 5;
+    payload.spike_days = payload.spike_days || 5;
+    payload.spike_gain = payload.spike_gain || 5;
+    payload.ath_lookback_days = payload.ath_lookback_days || 180;
+    payload.ath_block_days = payload.ath_block_days || 10;
+
+    try{
+      const r = await fetch("/api/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+      if(!r.ok) throw new Error();
+      toast("Settings updated!", true);
+      await loadSettings();
+    }catch(e){
+      toast("Failed to update settings", false);
+    }
+  }
+
+  // ---- Orders table ----
+  function handleSort(key){
+    if(sortConfig.key===key){
+      sortConfig.direction = (sortConfig.direction==="asc"?"desc":"asc");
+    } else {
+      sortConfig.key = key; sortConfig.direction = "asc";
+    }
+    renderTable();
+  }
+
+  function sortedOrders(list){
+    const {key, direction} = sortConfig;
+    if(!key) return list.slice();
+    const sorted = list.slice().sort((a,b)=>{
+      const aBuy = new Date(a.timestamp), bBuy = new Date(b.timestamp);
+      if(key==="sell_time"){
+        const aSell = a.sell_time?new Date(a.sell_time):null;
+        const bSell = b.sell_time?new Date(b.sell_time):null;
+        const aHold = aSell ? Math.floor((aSell-aBuy)/(86400000)) : Infinity;
+        const bHold = bSell ? Math.floor((bSell-bBuy)/(86400000)) : Infinity;
+        return aHold - bHold;
+      }
+      if(key==="hold_days"){
+        const now=new Date();
+        const aSell=a.sell_time?new Date(a.sell_time):now;
+        const bSell=b.sell_time?new Date(b.sell_time):now;
+        const aHold=Math.floor((aSell-aBuy)/86400000), bHold=Math.floor((bSell-bBuy)/86400000);
+        return aHold-bHold;
+      }
+      if(key==="timestamp") return aBuy - bBuy;
+      if(key==="status"){
+        const av=a.sell_time?1:-1, bv=b.sell_time?1:-1;
+        return av-bv;
+      }
+      if(key==="sell_price"){
+        const av=parseFloat(a.sell_price||0), bv=parseFloat(b.sell_price||0);
+        return av-bv;
+      }
+      if(key==="current_price"){
+        const av=parseFloat(a.current_price||0), bv=parseFloat(b.current_price||0);
+        return av-bv;
+      }
+      if(key==="gain_loss"){
+        const ag = (parseFloat(a.current_price||a.price)-parseFloat(a.price||0))/parseFloat(a.price||1)*100;
+        const bg = (parseFloat(b.current_price||b.price)-parseFloat(b.price||0))/parseFloat(b.price||1)*100;
+        return ag-bg;
+      }
+      const av=a[key], bv=b[key];
+      if(typeof av==="number" && typeof bv==="number") return av-bv;
+      return String(av).localeCompare(String(bv));
+    });
+    return direction==="asc"?sorted:sorted.reverse();
+  }
+
+  function filteredOrders(){
+    const q = searchTicker.trim().toLowerCase();
+    const start = normDate(startDate), end = normDate(endDate);
+
+    // find duplicates among open
+    const dupCount = {};
+    orders.filter(o=>!o.sell_time).forEach(o=> dupCount[o.symbol]=(dupCount[o.symbol]||0)+1 );
+    const dupSymbols = Object.entries(dupCount).filter(([_,c])=>c>1).map(([s])=>s);
+
+    return orders.filter(o=>{
+      if(q && !o.symbol.toLowerCase().includes(q)) return false;
+
+      const buyCali = laMidnight(o.timestamp);
+      const dateToCheck = o.sell_time ? laMidnight(o.sell_time) : buyCali;
+      const afterStart = start ? (sameDay(dateToCheck,start) || dateToCheck>start) : true;
+      const beforeEnd  = end   ? (sameDay(dateToCheck,end)   || dateToCheck<end)   : true;
+      if(!(afterStart && beforeEnd)) return false;
+
+      if(statusFilter==="open" && o.sell_time) return false;
+      if(statusFilter==="closed" && !o.sell_time) return false;
+
+      if(showDupesOnly && (o.sell_time || !dupSymbols.includes(o.symbol))) return false;
+
+      return true;
+    });
+  }
+
+  function renderStats(){
+    const grid = $("#statsGrid");
+    const openCount = filteredOrders().filter(o=>!o.sell_time).length;
+    const closedCount = filteredOrders().filter(o=>!!o.sell_time).length;
+
+    const tiles = [
+      {label:"📅 Avg Holding", value: avgHoldDays()},
+      {label:"🧮 Median Holding", value: medianHoldDays()},
+      {label:"📈 Open Positions", value: openCount},
+      {label:"🗃️ Closed Positions", value: closedCount},
+      {label:"💸 Sold Amount", value: "$"+soldAmountWithGain10()},
+      {label:"💼 Portfolio", value: portfolioValue!=null?("$"+Number(portfolioValue).toFixed(2)):"—"},
+      {label:"🏦 Alpaca Cash", value: alpacaCash!=null?("$"+Number(alpacaCash).toFixed(2)):"—"},
+      {label:"📊 Total Trades", value: (orders||[]).length},
+    ];
+
+    grid.innerHTML = tiles.map(t=>(
+      '<div class="card"><div class="lbl">'+t.label+'</div><div class="val">'+t.value+'</div></div>'
+    )).join("");
+
+    const pill=$("#market-pill");
+    pill.textContent = "Market: " + (marketStatus||"—");
+    pill.className = "pill " + (marketStatus==="open"?"ok":(marketStatus==="closed"?"bad":""));
+  }
+
+  function renderTable(){
+    const list = sortedOrders(filteredOrders());
+    const total = list.length;
+    const per = itemsPerPage;
+    const pages = Math.max(1, Math.ceil(total/per));
+    currentPage = Math.min(currentPage, pages);
+
+    const slice = list.slice((currentPage-1)*per, currentPage*per);
+    const tbody = $("#ordersBody"); tbody.innerHTML="";
+
+    const now = new Date();
+    slice.forEach(o=>{
+      const buy = new Date(o.timestamp);
+      const sell = o.sell_time? new Date(o.sell_time) : null;
+      const holdDays = sell ? Math.floor((sell-buy)/86400000)+1 : Math.floor((now-buy)/86400000)+1;
+      const cur = parseFloat(o.current_price||o.price||0), p = parseFloat(o.price||0);
+      const gain = p>0 ? ((cur-p)/p*100) : 0;
+      const isBlue = !o.sell_time && gain>8;
+
+      const tr = document.createElement("tr");
+      if(isBlue) tr.classList.add("rowBlue");
+      tr.innerHTML = `
+        <td class="center">${new Date(o.timestamp).toLocaleString("en-US",{timeZone:"America/Los_Angeles"})}
+          (<span class="muted">${new Date(o.timestamp).toLocaleDateString("en-US",{timeZone:"America/Los_Angeles",weekday:"long"})}</span>)</td>
+        <td class="center">${o.symbol}</td>
+        <td class="center">${o.qty}</td>
+        <td class="center">$${o.price}</td>
+        <td class="center" style="font-weight:700;color:${o.sell_time?"brown":"green"}">${o.sell_time?"Closed":"Open"}</td>
+        <td class="center">${o.current_price?("$"+Number(o.current_price).toFixed(2)):"—"}</td>
+        <td class="center">${o.sell_price?("$"+Number(o.sell_price).toFixed(2)):"—"}</td>
+        <td class="center">${holdDays}</td>
+        <td class="center ${gain>=0?"gain":"loss"}">${p?gain.toFixed(2)+"%":"—"}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    $("#pageText").textContent = `Page ${currentPage} of ${pages}`;
+    $("#totalPositions").textContent = `Total Positions ${total}`;
+  }
+
+  // ---- Events ----
+  $("#toggleSettingsBtn").addEventListener("click", ()=>{
+    const p=$("#settingsPanel");
+    const open = p.classList.contains("hidden");
+    p.classList.toggle("hidden");
+    $("#toggleSettingsBtn").textContent = open ? "⬆️ Hide Settings" : "⬇️ Open Settings";
+  });
+  $("#saveBtn").addEventListener("click", saveSettings);
+
+  $("#dupesOnly").addEventListener("change", e=>{ showDupesOnly=e.target.checked; currentPage=1; renderTable(); });
+  $("#searchTicker").addEventListener("input", e=>{ searchTicker=e.target.value; renderTable(); });
+
+  $("#btnToday").addEventListener("click", ()=>{
+    const t=new Date();
+    const s=t.toLocaleDateString("en-CA",{timeZone:"America/Los_Angeles"});
+    $("#startDate").value=s; $("#endDate").value=s;
+    startDate=s; endDate=s; currentPage=1; renderTable();
+  });
+  $("#btnWeek").addEventListener("click", ()=>{
+    const now=new Date();
+    const monday=new Date(now); monday.setDate(now.getDate()-((now.getDay()+6)%7));
+    const sunday=new Date(monday); sunday.setDate(monday.getDate()+6);
+    const from=monday.toLocaleDateString("en-CA",{timeZone:"America/Los_Angeles"});
+    const to=sunday.toLocaleDateString("en-CA",{timeZone:"America/Los_Angeles"});
+    $("#startDate").value=from; $("#endDate").value=to; startDate=from; endDate=to; currentPage=1; renderTable();
+  });
+  $("#btnMonth").addEventListener("click", ()=>{
+    const now=new Date();
+    const first=new Date(now.getFullYear(), now.getMonth(), 1);
+    const last=new Date(now.getFullYear(), now.getMonth()+1, 0);
+    const from=first.toLocaleDateString("en-CA",{timeZone:"America/Los_Angeles"});
+    const to=last.toLocaleDateString("en-CA",{timeZone:"America/Los_Angeles"});
+    $("#startDate").value=from; $("#endDate").value=to; startDate=from; endDate=to; currentPage=1; renderTable();
+  });
+  $("#startDate").addEventListener("change", e=>{ startDate=e.target.value; currentPage=1; renderTable(); });
+  $("#endDate").addEventListener("change", e=>{ endDate=e.target.value; currentPage=1; renderTable(); });
+  $("#resetBtn").addEventListener("click", ()=>{
+    $("#searchTicker").value=""; searchTicker="";
+    $("#startDate").value=""; startDate="";
+    $("#endDate").value=""; endDate="";
+    $("#statusFilter").value="all"; statusFilter="all";
+    $("#dupesOnly").checked=false; showDupesOnly=false;
+    renderTable();
+  });
+  $("#statusFilter").addEventListener("change", e=>{ statusFilter=e.target.value; currentPage=1; renderTable(); });
+
+  $("#itemsPerPage").value = String(itemsPerPage);
+  $("#itemsPerPage").addEventListener("change", e=>{
+    itemsPerPage = parseInt(e.target.value,10);
+    localStorage.setItem("itemsPerPage", String(itemsPerPage));
+    currentPage=1; renderTable();
+  });
+  $("#prevBtn").addEventListener("click", ()=>{ if(currentPage>1){ currentPage--; renderTable(); }});
+  $("#nextBtn").addEventListener("click", ()=>{ currentPage++; renderTable(); });
+
+  $$("#ordersTable th").forEach(th=>{
+    th.addEventListener("click", ()=> handleSort(th.getAttribute("data-key")));
+  });
+
+  // ---- Refresh loops ----
+  async function refreshAll(){
+    await Promise.all([loadCash(), loadSettings(), loadMarket(), loadOrders()]);
+    renderStats(); renderSettings(); renderTable();
+  }
+  async function refreshLight(){
+    await Promise.all([loadCash(), loadMarket(), loadOrders()]);
+    renderStats(); renderTable();
+  }
+
+  refreshAll();
+  setInterval(refreshLight, 120000); // 2 minutes
+})();
+</script>
+</body>
+</html>
+    """
+
+
 # =========================
 # Scheduler
 # =========================
