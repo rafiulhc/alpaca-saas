@@ -1,0 +1,12 @@
+{
+  "name": "alpaca-trader",
+  "stack": "container",
+  "env": {
+    "POLYGON_API_KEY": {"required": true},
+    "KEY_ID": {"required": true},
+    "SECRET_KEY": {"required": true},
+    "MONGO_URI": {"required": true},
+    "MONGO_DB_NAME": {"required": true},
+    "SUSPENDED": {"required": false, "value": "false"}
+  }
+}
